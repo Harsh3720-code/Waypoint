@@ -33,8 +33,8 @@ will proceed with these unless told otherwise.
 
 | # | Topic | Issue | Recommendation |
 |---|---|---|---|
-| D1 | **Embeddings** (PRD open Q4) | sentence-transformers pulls in PyTorch (~1–2 GB image), which hurts cold starts on a scale-to-zero Container App. | **Voyage AI** in prod (only guidance docs are embedded — no learner data leaves). Keep an `Embedder` interface with a tiny local fallback for offline dev/CI. |
-| D2 | **Standalone vs TeachDesk** (open Q2) | Affects repo layout, auth, shared UI. | **Standalone repo**, clean module boundaries so it could be absorbed later. Need to know what TeachDesk is. |
+| D1 | **Embeddings** (PRD open Q4) | sentence-transformers pulls in PyTorch (~1–2 GB image), which hurts cold starts on a scale-to-zero Container App. Voyage AI needs an API key we don't have. | **Local embeddings via `fastembed`** (ONNX runtime, no PyTorch) with `BAAI/bge-small-en-v1.5` (384-dim, ~130 MB). No key, no cost, nothing leaves the box. Behind an `Embedder` interface so Voyage can be added later as a config switch. **Decided 18 Nov 2026.** |
+| D2 | **Standalone vs TeachDesk** (open Q2) | Affects repo layout, auth, shared UI. | **Standalone.** TeachDesk is unrelated. **Decided 18 Nov 2026.** |
 | D3 | **Learner agreement** | FR5 requires "learner agreement recorded", but the learner role is v2. | Staff record agreement on the learner's behalf (who, date, method: in person/verbal/signed). |
 | D4 | **"Every view" audited** (FR10) | Auditing every read of everything is noisy. | Define *sensitive entities* = Learner profile/needs, SupportCall, ILSP, SessionNote, SupportLog, CheckInSuggestion. Audit create/update/delete/view/export on those only; list endpoints log one event per page, not per row. |
 | D5 | **PII redaction approach** | Generic NER (Presidio/spaCy) misses names and adds weight. | We *know* every learner/staff name from the DB → **dictionary-based redaction** of known names + regex for emails, phones, DOBs, postcodes, ULNs; reversible placeholder map. Optional NER pass as a second line. Unit-tested with adversarial cases. |
@@ -48,9 +48,10 @@ will proceed with these unless told otherwise.
 | D13 | **Retention period** | "Configurable" but no mechanism. | Admin setting + a scheduled purge job; soft-delete first, hard-delete after grace period; purge itself audited. |
 | D14 | **Pilot vs portfolio** (open Q1) | A pilot needs a DPIA and security review. | Build *as if* real (per §9 of PRD) but scope = **portfolio**. Write a lightweight DPIA-style note in `docs/` anyway — good portfolio signal. |
 
-Prerequisites I'll need from you before the relevant milestone:
-- **M2:** an Anthropic API key (and a Voyage key if D1 is accepted), added as GitHub Actions secrets.
-- **M4:** an Azure subscription (free credits) and permission to create a service principal / OIDC federated credential for GitHub Actions.
+Prerequisites, and how we cope without them:
+- **Voyage key:** not needed (D1).
+- **Anthropic API key, needed for M2.** Until we have one, M2 is built against a fake `LLMClient` and recorded responses, so the whole pipeline, the UI and the rule-based evals all work offline. The key is only required for live drafting and the LLM-as-judge evals. API usage is billed separately from a Claude.ai subscription; a few dollars of credit covers development and the eval suite.
+- **Azure subscription, needed for M4 (around week 8).** A new Azure free account currently gives time-limited starter credit plus 12 months of some free services (check current terms when signing up). Until then: everything runs in `docker compose`, and the Bicep templates and deploy workflow are written and validated (`az bicep build`, what-if) but not applied. If Azure stays unavailable, the same images can deploy to any container host; Azure remains the documented target.
 
 ---
 
